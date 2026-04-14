@@ -9,10 +9,17 @@ class ExcelHandler:
     def write_to_active_sheet(self, location, x_val, y_val):
         """ActiveSheet에서 위치 찾아 기록"""
         try:
-            app = xw.apps.active if xw.apps.count > 0 else xw.App(visible=True)
+            if xw.apps.count > 0:
+                app = xw.apps.active
+            else:
+                # 엑셀을 새로 띄울 때 빈 통합 문서를 생성하지 않도록 설정
+                app = xw.App(visible=True, add_book=False)
+            
             target_name = os.path.basename(self.file_path)
             book = next((b for b in app.books if b.name == target_name), None)
-            if not book: book = app.books.open(self.file_path)
+            
+            if not book: 
+                book = app.books.open(self.file_path)
             
             ws = book.sheets.active
             last_row = ws.range('C' + str(ws.cells.last_cell.row)).end('up').row

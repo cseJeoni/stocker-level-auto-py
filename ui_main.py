@@ -20,7 +20,7 @@ class MainUI(QMainWindow):
         layout.addWidget(gb_ex) # 오타 수정: gb_excel -> gb_ex
 
         # 2. BLE 설정
-        gb_ble = QGroupBox("2. Bluetooth Connection (3D/2D Only)")
+        gb_ble = QGroupBox("2. Bluetooth Connection (Level only)")
         l_ble = QVBoxLayout()
         self.cb_ble = QComboBox()
         self.btn_scan = QPushButton("장치 스캔 시작")

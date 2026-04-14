@@ -5,7 +5,8 @@ server_address = "127.0.0.1"
 server_port = 5000
 
 # 테스트할 위치 목록
-shelf_list = ["1-1-1", "1-1-2", "1-1-3", "1-1-4"]
+shelf_list = ["1-1-1", "1-1-2", "1-1-3", "1-1-4", "1-1-5", "1-1-6", "1-1-7", "1-1-8",
+              "2-1-1", "2-1-2", "2-1-3", "2-1-4", "2-1-5", "2-1-6", "2-1-7", "2-1-8"]
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((server_address, server_port))
