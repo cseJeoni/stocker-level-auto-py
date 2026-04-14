@@ -4,7 +4,6 @@ import asyncio
 from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox
 from PyQt5.QtCore import pyqtSlot, QTime, pyqtSignal
 from PyQt5.QtGui import QTextCursor
-
 from ui_main import MainUI
 from ble_module import scan_devices
 from network_module import AutomationServer
@@ -18,7 +17,6 @@ class MainController(MainUI):
         self.btn_excel.clicked.connect(self.select_excel)
         self.btn_scan.clicked.connect(self.start_scan)
         self.btn_ready.clicked.connect(self.start_automation)
-        
         self.device_found_signal.connect(lambda info: self.cb_ble.addItem(info))
         self.log_signal.connect(self.add_log)
 
@@ -41,15 +39,11 @@ class MainController(MainUI):
         if not self.edit_excel.text() or self.cb_ble.currentIndex() == -1:
             QMessageBox.warning(self, "경고", "설정을 완료하세요.")
             return
-
         addr = self.cb_ble.currentText().split("(")[-1].replace(")", "")
         self.server = AutomationServer(addr, self.edit_excel.text())
         self.server.log_signal.connect(self.add_log)
         self.server.start()
-        
-        self.btn_ready.setEnabled(False)
-        self.btn_ready.setText("RUNNING...")
-        self.btn_ready.setStyleSheet("background-color: #f44336; color: white;")
+        self.btn_ready.setEnabled(False); self.btn_ready.setText("RUNNING..."); self.btn_ready.setStyleSheet("background-color: #f44336; color: white;")
 
     @pyqtSlot(str)
     def add_log(self, msg):

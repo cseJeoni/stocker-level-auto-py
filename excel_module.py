@@ -7,22 +7,20 @@ class ExcelHandler:
         self.file_path = file_path.replace('/', '\\')
 
     def write_to_active_sheet(self, location, x_val, y_val):
-        """ActiveSheet에서 위치를 찾아 데이터 기록 """
+        """ActiveSheet에서 위치 찾아 기록"""
         try:
             app = xw.apps.active if xw.apps.count > 0 else xw.App(visible=True)
             target_name = os.path.basename(self.file_path)
             book = next((b for b in app.books if b.name == target_name), None)
             if not book: book = app.books.open(self.file_path)
             
-            ws = book.sheets.active # 현재 활성 시트 
+            ws = book.sheets.active
             last_row = ws.range('C' + str(ws.cells.last_cell.row)).end('up').row
             if last_row < config.XL_START_ROW: last_row = 100
             
-            # 검색 속도 향상을 위해 범위를 한 번에 읽음
             b1_data = ws.range((config.XL_START_ROW, config.XL_B1_SHELF), (last_row, config.XL_B1_SHELF)).value
             b2_data = ws.range((config.XL_START_ROW, config.XL_B2_SHELF), (last_row, config.XL_B2_SHELF)).value
 
-            # BANK 1 & 2 순차 검색
             for data, s_col, x_col, y_col in [
                 (b1_data, config.XL_B1_SHELF, config.XL_B1_X, config.XL_B1_Y),
                 (b2_data, config.XL_B2_SHELF, config.XL_B2_X, config.XL_B2_Y)
