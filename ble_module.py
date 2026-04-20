@@ -2,10 +2,15 @@ import asyncio
 from bleak import BleakScanner, BleakClient
 import config
 
-# EXE 빌드 시 의존성 누락 방지
+# EXE 빌드 시 WinRT 백엔드 의존성 누락 방지
 try:
+    import winrt.windows.foundation
     import winrt.windows.foundation.collections
     import winrt.windows.devices.bluetooth
+    import winrt.windows.devices.bluetooth.genericattributeprofile
+    import winrt.windows.devices.enumeration
+    import winrt.windows.devices.radios
+    import winrt.windows.storage.streams
 except ImportError:
     pass
 
