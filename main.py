@@ -11,8 +11,8 @@ from ble_module import scan_devices
 from network_module import AutomationServer
 
 
-# 글로벌 에러 캐쳐: UI 스레드에서 발생하는 런타임 에러가 발생했을 때 프로그램이 튕기지 않고
-# crash_log.txt에 기록
+# In --noconsole EXE builds, stderr is suppressed and unhandled exceptions cause a
+# silent crash. This hook redirects them to a log file for post-mortem diagnosis.
 def _handle_exception(exc_type, exc_value, exc_tb):
     try:
         with open("crash_log.txt", "a", encoding="utf-8") as f:
@@ -25,7 +25,7 @@ sys.excepthook = _handle_exception
 
 
 class MainController(MainUI):
-    # 스캔 결과와 로그를 UI로 받아오기 위한 Signal 설정
+    # Signals used to receive data from background threads into the UI thread safely.
     device_found_signal = pyqtSignal(str)
     log_signal = pyqtSignal(str)
 
@@ -33,29 +33,31 @@ class MainController(MainUI):
         super().__init__()
         self.btn_scan.clicked.connect(self.start_scan)
         self.btn_ready.clicked.connect(self.start_automation)
-        # 기기를 찾으면 콤보박스에 추가하도록 연결
         self.device_found_signal.connect(lambda info: self.cb_ble.addItem(info))
         self.log_signal.connect(self.add_log)
 
     def start_scan(self):
-        # 스캔 버튼을 눌렀을 때 UI가 멈추지 않도록 백그라운드 스레드에서 스캔 진행
+        # BLE discovery is offloaded to a daemon thread to keep the UI responsive.
         self.cb_ble.clear()
         self.add_log("📡 스캔 중...")
         threading.Thread(target=self.run_scan, daemon=True).start()
 
     def run_scan(self):
+        # Runs async BLE discovery in a dedicated event loop, then forwards each
+        # discovered device to the UI via signal.
         loop = asyncio.new_event_loop()
         try:
             devices = loop.run_until_complete(scan_devices())
         finally:
             loop.close()
         for d in devices:
-            self.device_found_signal.emit(d)  # 찾은 기기를 UI에 전달
+            self.device_found_signal.emit(d)
         self.log_signal.emit("✅ 스캔 완료")
 
     def start_automation(self):
-        # READY 버튼 클릭 시 서버와 통신을 시작
-        if self.cb_ble.currentIndex() == -1:  # 선택된 기기가 없으면 무시
+        # Parses the MAC address from the combo box display string, wires up the
+        # server's signals to the UI slots, then starts the background worker thread.
+        if self.cb_ble.currentIndex() == -1:
             return
         addr = self.cb_ble.currentText().split("(")[-1].replace(")", "")
         self.server = AutomationServer(addr, self.cb_stocker.currentText())
@@ -67,7 +69,7 @@ class MainController(MainUI):
 
     @pyqtSlot(list)
     def update_table(self, data):
-        # 백그라운드에서 받은 CSV 한 줄 데이터를 오른쪽 표에 그려줌
+        # Appends one measurement row to the live data table and scrolls to the bottom.
         row = self.table_data.rowCount()
         self.table_data.insertRow(row)
         for i, val in enumerate(data):

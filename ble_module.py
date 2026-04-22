@@ -2,7 +2,9 @@ import asyncio
 from bleak import BleakScanner, BleakClient
 import config
 
-# EXE 빌드 시 WinRT 백엔드 의존성 누락 방지
+# Bleak's WinRT backend relies on several winrt sub-modules that PyInstaller's
+# static analysis does not follow. Importing them explicitly here forces them
+# into the frozen bundle and prevents a silent crash at runtime.
 try:
     import winrt.windows.foundation
     import winrt.windows.foundation.collections
@@ -16,28 +18,34 @@ except ImportError:
 
 
 class BleHandler:
+    """Manages the BLE connection lifecycle and data retrieval for a single sensor device."""
+
     def __init__(self, address):
-        self.address = address  # 레벨기의 MAC 주소
+        self.address = address
         self.client = None
 
     async def connect(self):
+        # Idempotent — skips re-initialization if the client is already connected.
         if self.client is None or not self.client.is_connected:
             self.client = BleakClient(self.address, timeout=10.0)
             await self.client.connect()
         return True
 
     async def read_level_data(self):
-        # 0.1초 간격으로 AVG_COUNT회 측정 후 X, Y 평균 반환
+        # Collects AVG_COUNT samples at AVG_INTERVAL spacing to average out
+        # sensor vibration noise, then returns the mean X/Y values rounded to 4 decimals.
+        # Returns (None, None) on any BLE or parse error.
+        # Expected GATT characteristic format: "DATA:LEVEL:<x>:<y>"
         x_list, y_list = [], []
         try:
             if not self.client or not self.client.is_connected:
                 return None, None
             for _ in range(config.AVG_COUNT):
                 raw = await self.client.read_gatt_char(config.BLE_DATA_UUID)
-                parts = raw.decode('ascii').split(':')  # 예: "DATA:LEVEL:0.123:1.456"
+                parts = raw.decode('ascii').split(':')
                 if len(parts) >= 4:
-                    x_list.append(float(parts[2]))  # 2번째 자리 값이 X축
-                    y_list.append(float(parts[3]))  # 3번째 자리 값이 Y축
+                    x_list.append(float(parts[2]))
+                    y_list.append(float(parts[3]))
                 await asyncio.sleep(config.AVG_INTERVAL)
             if x_list and y_list:
                 return round(sum(x_list) / len(x_list), 4), round(sum(y_list) / len(y_list), 4)
@@ -51,7 +59,8 @@ class BleHandler:
 
 
 async def scan_devices():
-    # 주변 블루투스 기기 검색 후 이름 필터링
+    # Discovers nearby BLE devices and filters by name length and prefix
+    # to return only compatible sensor models.
     devices = await BleakScanner.discover(timeout=config.SCAN_TIMEOUT)
     return [
         f"{d.name} ({d.address})"

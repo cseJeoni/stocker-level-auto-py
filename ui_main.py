@@ -4,6 +4,12 @@ import config
 
 
 class MainUI(QMainWindow):
+    """
+    Defines the main window layout.
+    Left panel: stocker selection, BLE device controls, and the system log.
+    Right panel: live measurement table populated as data is recorded.
+    """
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Stocker Level Auto System v3.1 (CSV Mode)")
@@ -12,7 +18,7 @@ class MainUI(QMainWindow):
         main_widget = QWidget()
         main_layout = QHBoxLayout(main_widget)
 
-        # 왼쪽 영역
+        # --- Left panel: controls and log ---
         left_layout = QVBoxLayout()
 
         gb_stk = QGroupBox("1. 스토커 선택")
@@ -44,7 +50,7 @@ class MainUI(QMainWindow):
         left_layout.addWidget(self.txt_log)
         main_layout.addLayout(left_layout, 1)
 
-        # 오른쪽 영역 (데이터 테이블)
+        # --- Right panel: live measurement table ---
         right_layout = QVBoxLayout()
         right_layout.addWidget(QLabel("📊 실시간 CSV 기록 데이터:"))
         self.table_data = QTableWidget()
