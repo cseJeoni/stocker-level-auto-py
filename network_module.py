@@ -33,7 +33,7 @@ class AutomationServer(QObject):
             self._run_internal()
         except Exception:
             _write_crash_log(traceback.format_exc())
-            self.log_signal.emit("❌ [시스템] 치명적 오류 발생 (crash_log.txt 확인)")
+            self.log_signal.emit("[ERROR] Fatal error. See crash_log.txt for details.")
 
     def _run_internal(self):
         loop = asyncio.new_event_loop()
@@ -44,7 +44,7 @@ class AutomationServer(QObject):
         try:
             loop.run_until_complete(self.ble.connect())
         except Exception as e:
-            self.log_signal.emit(f"❌ [시스템] 레벨기 연결 실패: {e}")
+            self.log_signal.emit(f"[ERROR] Failed to connect to level sensor: {e}")
             loop.close()
             return
 
@@ -56,7 +56,7 @@ class AutomationServer(QObject):
             # A 1-second accept timeout allows the loop to check is_running periodically
             # without blocking indefinitely on accept().
             server.settimeout(1.0)
-            self.log_signal.emit("🚀 서버 가동 중 (저장경로: 다운로드 폴더)")
+            self.log_signal.emit("[INFO] Server started. Output path: Downloads folder")
 
             while self.is_running:
                 try:
@@ -66,7 +66,7 @@ class AutomationServer(QObject):
                     continue
 
         except OSError as e:
-            self.log_signal.emit(f"❌ [시스템] 포트 {config.SERVER_PORT} 바인딩 실패: {e}")
+            self.log_signal.emit(f"[ERROR] Port {config.SERVER_PORT} binding failed: {e}")
         finally:
             # Guaranteed cleanup on both normal exit and error exit.
             server.close()
@@ -84,7 +84,7 @@ class AutomationServer(QObject):
                     break
 
                 msg = data.strip()
-                self.log_signal.emit(f"📥 수신 : {msg}")
+                self.log_signal.emit(f"[RECV] {msg}")
 
                 if msg.startswith("MEASURE|"):
                     self._handle_measure(client, loop, msg.split("|")[1])
@@ -93,12 +93,12 @@ class AutomationServer(QObject):
                     loc = msg.split("|")[1]
                     # Distinguish BLE disconnection from a slow Python response to
                     # provide an actionable diagnosis in the log.
-                    status = "연결 끊김" if not (self.ble.client and self.ble.client.is_connected) else "응답 지연"
-                    self.log_signal.emit(f"⚠️ 타임아웃 : 설비 중단 알림 ({loc}) - 사유: {status}")
+                    status = "BLE disconnected" if not (self.ble.client and self.ble.client.is_connected) else "response delayed"
+                    self.log_signal.emit(f"[WARN] Equipment timeout at {loc}. Cause: {status}")
                     break
 
                 elif msg == "FINISH":
-                    self.log_signal.emit("💾 완료 : CSV 저장 및 세션 종료")
+                    self.log_signal.emit("[INFO] Session complete. CSV saved.")
                     break
 
     def _handle_measure(self, client, loop, loc):
@@ -115,10 +115,10 @@ class AutomationServer(QObject):
             res = self.csv.write_row(loc, x, y)
             if res:
                 self.table_signal.emit(res)
-                self.log_signal.emit(f"✅ 기록 완료 : {loc} (X:{x}, Y:{y})")
+                self.log_signal.emit(f"[INFO] Data saved: {loc} (X: {x}, Y: {y})")
                 client.sendall(f"DONE|{loc}\n".encode('utf-8'))
         except Exception:
-            self.log_signal.emit(f"❌ 에러 : 블루투스 연결 확인 필요 ({loc})")
+            self.log_signal.emit(f"[ERROR] BLE read failed at {loc}. Check sensor connection.")
             client.sendall(f"ERROR|BLE_DISCONNECT|{loc}\n".encode('utf-8'))
 
 

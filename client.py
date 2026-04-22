@@ -19,37 +19,37 @@ client_socket.connect((server_address, server_port))
 
 try:
     for shelf in shelf_list:
-        print(f"\n[설비] {shelf} 위치로 이동 중...")
+        print(f"\n[SIM] Moving to shelf {shelf}...")
         time.sleep(2)  # Simulates travel and mechanical stabilization time.
 
         client_socket.sendall(f"MEASURE|{shelf}\n".encode("utf-8"))
-        print(f"[설비] {shelf} 안착 및 측정 요청 송신.")
+        print(f"[SIM] MEASURE request sent for {shelf}.")
 
         try:
             data = client_socket.recv(1024).decode("utf-8")
             if f"DONE|{shelf}" in data:
-                print(f"[설비] 서버 응답 수신: {shelf} 입력 완료 확인.")
+                print(f"[SIM] DONE received. {shelf} recorded successfully.")
                 print("--------------------------------------")
             elif "ERROR" in data:
                 # Server detected a BLE failure; abort the run.
-                print(f"[설비] 에러 응답 수신: {data.strip()}. 중단합니다.")
+                print(f"[SIM] ERROR response: {data.strip()}. Aborting.")
                 break
             else:
-                print(f"[설비] 예상치 못한 응답 수신: {data.strip()}. 중단합니다.")
+                print(f"[SIM] Unexpected response: {data.strip()}. Aborting.")
                 break
 
         except socket.timeout:
             # No response within 12 seconds. Notify the server before disconnecting
             # so it can log the correct failure reason.
-            print(f"[설비] ⏱️ 서버 응답 타임아웃! (12초 초과)")
+            print(f"[SIM] Server response timeout (12s exceeded).")
             client_socket.sendall(f"TIMEOUT|{shelf}\n".encode("utf-8"))
             break
 
     # Sent after normal completion or after an error break to signal session end.
     client_socket.sendall("FINISH\n".encode("utf-8"))
-    print("\n[설비] 측정 루틴 종료 (FINISH 송신 완료).")
+    print("\n[SIM] Measurement routine complete. FINISH sent.")
 
 except Exception as e:
-    print(f"[설비] 통신 에러 발생: {e}")
+    print(f"[SIM] Communication error: {e}")
 finally:
     client_socket.close()

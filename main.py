@@ -39,7 +39,7 @@ class MainController(MainUI):
     def start_scan(self):
         # BLE discovery is offloaded to a daemon thread to keep the UI responsive.
         self.cb_ble.clear()
-        self.add_log("📡 스캔 중...")
+        self.add_log("[INFO] Scanning for devices...")
         threading.Thread(target=self.run_scan, daemon=True).start()
 
     def run_scan(self):
@@ -52,7 +52,7 @@ class MainController(MainUI):
             loop.close()
         for d in devices:
             self.device_found_signal.emit(d)
-        self.log_signal.emit("✅ 스캔 완료")
+        self.log_signal.emit("[INFO] Scan complete.")
 
     def start_automation(self):
         # Parses the MAC address from the combo box display string, wires up the
