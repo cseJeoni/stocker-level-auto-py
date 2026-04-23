@@ -7,7 +7,7 @@ import multiprocessing
 from PyQt5.QtWidgets import QApplication, QTableWidgetItem
 from PyQt5.QtCore import pyqtSlot, QTime, pyqtSignal, Qt
 from ui_main import MainUI
-from ble_module import scan_devices, BleHandler
+from ble_module import scan_devices
 from network_module import AutomationServer
 
 
@@ -28,7 +28,6 @@ class MainController(MainUI):
     # Signals used to receive data from background threads into the UI thread safely.
     device_found_signal = pyqtSignal(str)
     log_signal = pyqtSignal(str)
-    measure_result_signal = pyqtSignal(object)  # Carries (x, y) tuple, or None on failure.
 
     def __init__(self):
         super().__init__()
@@ -36,10 +35,7 @@ class MainController(MainUI):
         self.btn_ready.clicked.connect(self.start_automation)
         self.btn_manual_measure.clicked.connect(self.do_manual_measure)
         self.device_found_signal.connect(lambda info: self.cb_ble.addItem(info))
-        # Enable the MEASURE button as soon as the first device is found.
-        self.device_found_signal.connect(lambda _: self.btn_manual_measure.setEnabled(True))
         self.log_signal.connect(self.add_log)
-        self.measure_result_signal.connect(self._on_measure_result)
 
     def start_scan(self):
         # BLE discovery is offloaded to a daemon thread to keep the UI responsive.
@@ -68,41 +64,26 @@ class MainController(MainUI):
         self.server = AutomationServer(addr, self.cb_stocker.currentText())
         self.server.log_signal.connect(self.add_log)
         self.server.table_signal.connect(self.update_table)
+        self.server.ready_signal.connect(self._on_server_ready)
+        self.server.manual_result_signal.connect(self._on_measure_result)
         self.server.start()
         self.btn_ready.setEnabled(False)
         self.btn_ready.setText("RUNNING...")
-        self.btn_manual_measure.setEnabled(False)  # BLE is now exclusively owned by the server.
+
+    @pyqtSlot()
+    def _on_server_ready(self):
+        # Enables the MEASURE button once the server confirms BLE is connected
+        # and the TCP server is actively listening.
+        self.btn_manual_measure.setEnabled(True)
 
     def do_manual_measure(self):
-        # Launches a single BLE read on a daemon thread. The button is disabled
-        # for the duration to prevent concurrent read requests.
-        if self.cb_ble.currentIndex() == -1:
-            return
-        addr = self.cb_ble.currentText().split("(")[-1].replace(")", "")
+        # Delegates the read request to the server thread via an Event flag.
+        # The server processes it on its own asyncio loop, avoiding any
+        # cross-thread BLE access.
         self.btn_manual_measure.setEnabled(False)
         self.lbl_x_val.setText("...")
         self.lbl_y_val.setText("...")
-        threading.Thread(target=self._run_manual_measure, args=(addr,), daemon=True).start()
-
-    def _run_manual_measure(self, addr):
-        # Standalone BLE read — owns its own BleHandler and event loop,
-        # completely independent of AutomationServer.
-        ble = BleHandler(addr)
-        loop = asyncio.new_event_loop()
-        result = None
-        try:
-            loop.run_until_complete(ble.connect())
-            x, y = loop.run_until_complete(ble.read_level_data())
-            result = (x, y)
-        except Exception:
-            pass
-        finally:
-            try:
-                loop.run_until_complete(ble.disconnect())
-            except Exception:
-                pass
-            loop.close()
-        self.measure_result_signal.emit(result)
+        self.server.request_manual_measure()
 
     @pyqtSlot(object)
     def _on_measure_result(self, result):

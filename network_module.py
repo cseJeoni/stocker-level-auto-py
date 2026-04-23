@@ -14,17 +14,26 @@ class AutomationServer(QObject):
     # emits these instead of touching UI widgets directly, which is not thread-safe.
     log_signal = pyqtSignal(str)    # Delivers status messages to the log panel.
     table_signal = pyqtSignal(list) # Delivers a recorded row to the live data table.
+    ready_signal = pyqtSignal()     # Fired once BLE is connected and the TCP server is listening.
+    manual_result_signal = pyqtSignal(object)  # Fired with (x, y) or None after a manual read.
 
     def __init__(self, ble_address, stocker_id):
         super().__init__()
         self.ble = BleHandler(ble_address)
         self.csv = CSVHandler(stocker_id)
         self.is_running = True
+        self._measure_request = threading.Event()
         # daemon=True ensures the thread is terminated automatically when the main window closes.
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
         self._thread.start()
+
+    def request_manual_measure(self):
+        # Called from the UI thread. Sets an event that the server thread checks
+        # between client connections, so the BLE read runs on the server's own
+        # event loop with no cross-thread asyncio access.
+        self._measure_request.set()
 
     def _run(self):
         # Top-level thread entry point. Any exception that escapes _run_internal
@@ -57,8 +66,14 @@ class AutomationServer(QObject):
             # without blocking indefinitely on accept().
             server.settimeout(1.0)
             self.log_signal.emit("[INFO] Server started. Output path: Downloads folder")
+            self.ready_signal.emit()
 
             while self.is_running:
+                # Process a pending manual read before blocking on accept().
+                # This keeps the BLE read on the server thread's own event loop.
+                if self._measure_request.is_set():
+                    self._measure_request.clear()
+                    self._do_manual_read(loop)
                 try:
                     client, _ = server.accept()
                     self._handle_client(client, loop)
@@ -72,6 +87,17 @@ class AutomationServer(QObject):
             server.close()
             loop.run_until_complete(self.ble.disconnect())
             loop.close()
+
+    def _do_manual_read(self, loop):
+        # Performs a single averaged BLE read and emits the result.
+        # Runs entirely on the server thread to avoid cross-thread asyncio access.
+        try:
+            x, y = loop.run_until_complete(
+                asyncio.wait_for(self.ble.read_level_data(), timeout=config.BLE_READ_TIMEOUT)
+            )
+            self.manual_result_signal.emit((x, y) if x is not None else None)
+        except Exception:
+            self.manual_result_signal.emit(None)
 
     def _handle_client(self, client, loop):
         # Drives the message exchange with a connected equipment client.
