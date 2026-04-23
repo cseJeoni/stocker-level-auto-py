@@ -38,7 +38,7 @@ class MainUI(QMainWindow):
         gb_ble.setLayout(l_ble)
         left_layout.addWidget(gb_ble)
 
-        self.btn_ready = QPushButton("START AUTOMATION")
+        self.btn_ready = QPushButton("READY")
         self.btn_ready.setFixedHeight(65)
         self.btn_ready.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         left_layout.addWidget(self.btn_ready)
