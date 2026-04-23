@@ -43,6 +43,26 @@ class MainUI(QMainWindow):
         self.btn_ready.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
         left_layout.addWidget(self.btn_ready)
 
+        # --- Manual Measurement: pre-flight BLE verification ---
+        self.btn_manual_measure = QPushButton("MEASURE")
+        self.btn_manual_measure.setFixedHeight(40)
+        self.btn_manual_measure.setEnabled(False)
+        left_layout.addWidget(self.btn_manual_measure)
+
+        readout_frame = QFrame()
+        readout_frame.setFrameShape(QFrame.StyledPanel)
+        readout_layout = QHBoxLayout(readout_frame)
+        readout_layout.addWidget(QLabel("X:"))
+        self.lbl_x_val = QLabel("--")
+        self.lbl_x_val.setStyleSheet("font-weight: bold; min-width: 70px;")
+        readout_layout.addWidget(self.lbl_x_val)
+        readout_layout.addWidget(QLabel("Y:"))
+        self.lbl_y_val = QLabel("--")
+        self.lbl_y_val.setStyleSheet("font-weight: bold; min-width: 70px;")
+        readout_layout.addWidget(self.lbl_y_val)
+        readout_layout.addStretch()
+        left_layout.addWidget(readout_frame)
+
         self.txt_log = QTextEdit()
         self.txt_log.setReadOnly(True)
         self.txt_log.setStyleSheet("background-color: #1e1e1e; color: #00FF00; font-family: Consolas;")
