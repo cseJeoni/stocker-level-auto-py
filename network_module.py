@@ -107,19 +107,25 @@ class AutomationServer(QObject):
                     break
 
     def _handle_measure(self, client, loop, loc):
-        try:
-            x, y = loop.run_until_complete(
-                asyncio.wait_for(self.ble.read_level_data(), timeout=config.BLE_READ_TIMEOUT)
-            )
-            if x is None:
-                raise ValueError("READ_ERROR")
-            
-            res = self.csv.write_row(loc, x, y)
-            if res:
-                self.table_signal.emit(res)
-                self.log_signal.emit(f"[INFO] Data saved: {loc} (X: {x}, Y: {y})")
-        except Exception:
-            self.log_signal.emit(f"[ERROR] BLE read failed at {loc}.")
+            try:
+                # Convert "1-01-01" format to "1-1-1" for Excel macro compatibility
+                # Split by '-', convert each part to int (to remove leading zeros), then join back
+                parts = loc.split('-')
+                loc = "-".join([str(int(p)) for p in parts])
+                
+                x, y = loop.run_until_complete(
+                    asyncio.wait_for(self.ble.read_level_data(), timeout=config.BLE_READ_TIMEOUT)
+                )
+                if x is None:
+                    raise ValueError("READ_ERROR")
+                
+                # Now 'loc' is in "1-1-1" format when passed to CSV and UI
+                res = self.csv.write_row(loc, x, y)
+                if res:
+                    self.table_signal.emit(res)
+                    self.log_signal.emit(f"[INFO] Data saved: {loc} (X: {x}, Y: {y})")
+            except Exception:
+                self.log_signal.emit(f"[ERROR] BLE read failed at {loc}.")
 
 def _write_crash_log(text):
     try:
