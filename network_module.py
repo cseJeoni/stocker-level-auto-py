@@ -82,7 +82,7 @@ class AutomationServer(QObject):
             self.manual_result_signal.emit(None)
 
     def _handle_client(self, client, loop):
-        # Set 30-second timeout to detect end of sequence
+        # 30-second timeout to detect sequence end
         client.settimeout(30.0)
         with client:
             while self.is_running:
@@ -92,40 +92,33 @@ class AutomationServer(QObject):
                         break
 
                     msg = data.strip()
-                    self.log_signal.emit(f"[RECV] {msg}")
+                    self.log_signal.emit(msg)
 
                     if msg.startswith("MEASURE|"):
                         self._handle_measure(client, loop, msg.split("|")[1])
 
-                    elif msg == "FINISH":
-                        # Ignore repeated FINISH signals used for equipment step transition
-                        self.log_signal.emit("[INFO] FINISH received (Step transition).")
-                        continue
-
                 except socket.timeout:
-                    self.log_signal.emit("[INFO] 30s timeout reached. Sequence finished and saved.")
+                    self.log_signal.emit("30s timeout reached. Sequence finished.")
                     break
 
     def _handle_measure(self, client, loop, loc):
-            try:
-                # Convert "1-01-01" format to "1-1-1" for Excel macro compatibility
-                # Split by '-', convert each part to int (to remove leading zeros), then join back
-                parts = loc.split('-')
-                loc = "-".join([str(int(p)) for p in parts])
-                
-                x, y = loop.run_until_complete(
-                    asyncio.wait_for(self.ble.read_level_data(), timeout=config.BLE_READ_TIMEOUT)
-                )
-                if x is None:
-                    raise ValueError("READ_ERROR")
-                
-                # Now 'loc' is in "1-1-1" format when passed to CSV and UI
-                res = self.csv.write_row(loc, x, y)
-                if res:
-                    self.table_signal.emit(res)
-                    self.log_signal.emit(f"[INFO] Data saved: {loc} (X: {x}, Y: {y})")
-            except Exception:
-                self.log_signal.emit(f"[ERROR] BLE read failed at {loc}.")
+        try:
+            # Convert "1-01-01" to "1-1-1" for Excel macro compatibility
+            parts = loc.split('-')
+            loc_converted = "-".join([str(int(p)) for p in parts])
+            
+            x, y = loop.run_until_complete(
+                asyncio.wait_for(self.ble.read_level_data(), timeout=config.BLE_READ_TIMEOUT)
+            )
+            if x is None:
+                raise ValueError("READ_ERROR")
+            
+            # Record data to CSV and update UI table
+            res = self.csv.write_row(loc_converted, x, y)
+            if res:
+                self.table_signal.emit(res)
+        except Exception:
+            self.log_signal.emit(f"BLE read failed at {loc}.")
 
 def _write_crash_log(text):
     try:

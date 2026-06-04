@@ -5,7 +5,7 @@ import traceback
 import datetime
 import multiprocessing
 from PyQt5.QtWidgets import QApplication, QTableWidgetItem
-from PyQt5.QtCore import pyqtSlot, QTime, pyqtSignal, Qt
+from PyQt5.QtCore import pyqtSlot, QTime, pyqtSignal, Qt, QDateTime
 from ui_main import MainUI
 from ble_module import scan_devices
 from network_module import AutomationServer
@@ -111,7 +111,8 @@ class MainController(MainUI):
 
     @pyqtSlot(str)
     def add_log(self, msg):
-        self.txt_log.append(f"[{QTime.currentTime().toString()}] {msg}")
+        timestamp = QDateTime.currentDateTime().toString("HH:mm:ss.zzz")
+        self.txt_log.append(f"<[{timestamp}]{msg}")
 
 
 if __name__ == "__main__":
