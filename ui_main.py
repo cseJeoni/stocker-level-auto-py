@@ -38,6 +38,12 @@ class MainUI(QMainWindow):
         gb_ble.setLayout(l_ble)
         left_layout.addWidget(gb_ble)
 
+        self.btn_reset = QPushButton("RESET")
+        self.btn_reset.setFixedHeight(40)
+        self.btn_reset.setStyleSheet("background-color: #F44336; color: white; font-weight: bold;")
+        self.btn_reset.setEnabled(False)
+        left_layout.addWidget(self.btn_reset)
+
         self.btn_ready = QPushButton("READY")
         self.btn_ready.setFixedHeight(65)
         self.btn_ready.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")

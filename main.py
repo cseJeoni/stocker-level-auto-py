@@ -33,9 +33,11 @@ class MainController(MainUI):
         super().__init__()
         self.btn_scan.clicked.connect(self.start_scan)
         self.btn_ready.clicked.connect(self.start_automation)
+        self.btn_reset.clicked.connect(self.reset_automation)
         self.btn_manual_measure.clicked.connect(self.do_manual_measure)
         self.device_found_signal.connect(lambda info: self.cb_ble.addItem(info))
         self.log_signal.connect(self.add_log)
+        self.server = None
 
     def start_scan(self):
         # BLE discovery is offloaded to a daemon thread to keep the UI responsive.
@@ -66,15 +68,29 @@ class MainController(MainUI):
         self.server.table_signal.connect(self.update_table)
         self.server.ready_signal.connect(self._on_server_ready)
         self.server.manual_result_signal.connect(self._on_measure_result)
+        self.server.cycle_done_signal.connect(self._on_cycle_done)
         self.server.start()
         self.btn_ready.setEnabled(False)
         self.btn_ready.setText("RUNNING...")
+        self.btn_reset.setEnabled(True)
+
+    def reset_automation(self):
+        if self.server is not None:
+            self.server.is_running = False
+        self.add_log("[INFO] Reset requested by user.")
 
     @pyqtSlot()
     def _on_server_ready(self):
         # Enables the MEASURE button once the server confirms BLE is connected
         # and the TCP server is actively listening.
         self.btn_manual_measure.setEnabled(True)
+
+    @pyqtSlot()
+    def _on_cycle_done(self):
+        self.btn_ready.setText("READY")
+        self.btn_ready.setEnabled(True)
+        self.btn_reset.setEnabled(False)
+        self.btn_manual_measure.setEnabled(False)
 
     def do_manual_measure(self):
         # Delegates the read request to the server thread via an Event flag.
