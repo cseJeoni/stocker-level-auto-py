@@ -76,9 +76,12 @@ class MainController(MainUI):
         self.btn_reset.setEnabled(True)
 
     def reset_session(self):
-        """RESET 버튼: 클라이언트 소켓 강제 종료 + BLE 해제 요청"""
+        """RESET 버튼: 클라이언트 소켓 강제 종료 + BLE 해제 + UI 초기화"""
         self.add_log("[INFO] Reset requested by user.")
         self.server.reset_session()
+        self.table_data.setRowCount(0)
+        self.txt_log.clear()
+        self.cb_ble.clear()
 
     # ── 서버 시그널 슬롯 ─────────────────────────────────────────
 
@@ -94,16 +97,11 @@ class MainController(MainUI):
 
     @pyqtSlot()
     def _on_cycle_done(self):
-        """사이클 종료(정상/타임아웃/RESET) — UI 전체 초기화"""
-        # 버튼 복원
+        """사이클 종료(정상/타임아웃/RESET) — 버튼 상태만 복원"""
         self.btn_ready.setText("READY")
         self.btn_ready.setEnabled(True)
         self.btn_reset.setEnabled(False)
         self.btn_manual_measure.setEnabled(False)
-        # 데이터 초기화
-        self.table_data.setRowCount(0)
-        self.txt_log.clear()
-        self.cb_ble.clear()
 
     # ── 수동 측정 ────────────────────────────────────────────────
 
