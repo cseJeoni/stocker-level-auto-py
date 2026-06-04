@@ -13,6 +13,7 @@ class AutomationServer(QObject):
     table_signal = pyqtSignal(list)
     ready_signal = pyqtSignal()
     manual_result_signal = pyqtSignal(object)
+    cycle_done_signal = pyqtSignal()
 
     def __init__(self, ble_address, stocker_id):
         super().__init__()
@@ -62,6 +63,7 @@ class AutomationServer(QObject):
                 try:
                     client, _ = server.accept()
                     self._handle_client(client, loop)
+                    self.is_running = False
                 except socket.timeout:
                     continue
 
@@ -69,8 +71,13 @@ class AutomationServer(QObject):
             self.log_signal.emit(f"[ERROR] Port binding failed: {e}")
         finally:
             server.close()
-            loop.run_until_complete(self.ble.disconnect())
+            try:
+                loop.run_until_complete(self.ble.disconnect())
+            except Exception:
+                pass
             loop.close()
+            self.log_signal.emit("Cycle terminated. BLE disconnected.")
+            self.cycle_done_signal.emit()
 
     def _do_manual_read(self, loop):
         try:
