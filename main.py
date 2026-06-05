@@ -128,7 +128,7 @@ class MainController(MainUI):
     @pyqtSlot(str)
     def add_log(self, msg):
         timestamp = QDateTime.currentDateTime().toString("HH:mm:ss.zzz")
-        self.txt_log.append(f"<[{timestamp}]{msg}")
+        self.txt_log.append(f"[{timestamp}] {msg}")
 
 
 if __name__ == "__main__":

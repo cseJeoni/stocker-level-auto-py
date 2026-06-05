@@ -89,20 +89,29 @@ class AutomationServer(QObject):
             self.manual_result_signal.emit(None)
 
     def _handle_client(self, client, loop):
-        # 30-second timeout to detect sequence end
+        # 30-second inactivity timeout triggers automatic sequence-end detection.
         client.settimeout(30.0)
         with client:
+            # makefile wraps the socket as a line-buffered text stream so each
+            # readline() call returns exactly one newline-terminated message,
+            # preventing the partial-read and message-merging issues of raw recv().
+            stream = client.makefile('r', encoding='utf-8')
             while self.is_running:
                 try:
-                    data = client.recv(1024).decode('utf-8')
-                    if not data:
+                    line = stream.readline()
+                    if not line:
                         break
 
-                    msg = data.strip()
+                    msg = line.strip()
+                    if not msg:
+                        continue
+
                     self.log_signal.emit(msg)
 
                     if msg.startswith("MEASURE|"):
                         self._handle_measure(client, loop, msg.split("|")[1])
+                    # FINISH signals are intentionally ignored — they serve as
+                    # step-transition markers for the equipment and require no response.
 
                 except socket.timeout:
                     self.log_signal.emit("30s timeout reached. Sequence finished.")
