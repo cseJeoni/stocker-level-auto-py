@@ -1,0 +1,11 @@
+# Python bytecode cache
+__pycache__/
+*.py[cod]
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# Runtime logs
+crash_log.txt

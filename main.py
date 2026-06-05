@@ -29,7 +29,7 @@ class MainController(MainUI):
     def __init__(self):
         super().__init__()
 
-        # 서버는 앱 시작 시 1회 생성 — TCP 소켓은 계속 유지된다
+        # Server is created once at startup; its TCP socket stays open.
         self.server = AutomationServer()
         self.server.log_signal.connect(self.add_log)
         self.server.table_signal.connect(self.update_table)
@@ -39,6 +39,18 @@ class MainController(MainUI):
         self.server.cycle_done_signal.connect(self._on_cycle_done)
         self.server.start()
 
+        # While a reset is in progress, signals still arriving from the server
+        # thread (e.g. an in-flight BLE read) must be ignored so they cannot
+        # repopulate the views right after we clear them.
+        self._resetting = False
+        # True only while the server thread is running an active measurement
+        # cycle. Used to decide whether RESET must wait for the cycle to end.
+        self._session_active = False
+
+        # RESET stays usable at all times: besides stopping an active session,
+        # it also clears leftover data after a cycle has already ended.
+        self.btn_reset.setEnabled(True)
+
         self.btn_scan.clicked.connect(self.start_scan)
         self.btn_ready.clicked.connect(self.start_session)
         self.btn_reset.clicked.connect(self.reset_session)
@@ -46,7 +58,7 @@ class MainController(MainUI):
         self.device_found_signal.connect(lambda info: self.cb_ble.addItem(info))
         self.log_signal.connect(self.add_log)
 
-    # ── BLE 스캔 ──────────────────────────────────────────────────
+    # ── BLE scan ──────────────────────────────────────────────────
 
     def start_scan(self):
         self.cb_ble.clear()
@@ -63,47 +75,78 @@ class MainController(MainUI):
             self.device_found_signal.emit(d)
         self.log_signal.emit("[INFO] Scan complete.")
 
-    # ── 세션 시작 / 리셋 ─────────────────────────────────────────
+    # ── Session start / reset ────────────────────────────────────
 
     def start_session(self):
-        """READY 버튼: BLE 연결 + 측정 사이클 시작"""
+        """READY button: connect BLE and start the measurement cycle."""
         if self.cb_ble.currentIndex() == -1:
             return
         addr = self.cb_ble.currentText().split("(")[-1].replace(")", "")
         self.server.start_session(addr, self.cb_stocker.currentText())
+        self._session_active = True
         self.btn_ready.setEnabled(False)
         self.btn_ready.setText("RUNNING...")
         self.btn_reset.setEnabled(True)
 
     def reset_session(self):
-        """RESET 버튼: 클라이언트 소켓 강제 종료 + BLE 해제 + UI 초기화"""
-        self.add_log("[INFO] Reset requested by user.")
-        self.server.reset_session()
-        self.table_data.setRowCount(0)
-        self.txt_log.clear()
-        self.cb_ble.clear()
+        """RESET button: stop any active session and clear the UI.
 
-    # ── 서버 시그널 슬롯 ─────────────────────────────────────────
+        Works in two situations:
+        - An active cycle is still running: ask the server to stop, then defer
+          the final clear to _on_cycle_done so late signals can't repopulate.
+        - The cycle has already ended (e.g. client disconnected or timed out):
+          there will be no cycle_done_signal, so clear immediately.
+        """
+        self.server.reset_session()
+        # Restore button/readout states immediately for instant feedback.
+        self.btn_ready.setText("READY")
+        self.btn_ready.setEnabled(True)
+        self.btn_manual_measure.setEnabled(False)
+        self.lbl_x_val.setText("--")
+        self.lbl_y_val.setText("--")
+        self._clear_views()
+
+        if self._session_active:
+            # Server thread is still alive; suppress its remaining signals until
+            # it confirms the cycle ended, then do an authoritative final clear.
+            self._resetting = True
+        else:
+            self.add_log("[INFO] Reset complete.")
+
+    def _clear_views(self):
+        """Empty the table, BLE device list and system log."""
+        self.table_data.setRowCount(0)
+        self.cb_ble.clear()
+        self.txt_log.clear()
+
+    # ── Server signal slots ──────────────────────────────────────
 
     @pyqtSlot()
     def _on_server_ready(self):
-        """TCP 서버 바인딩 완료 — 앱 시작 직후 1회만 호출됨"""
-        pass  # 로그는 서버 스레드에서 직접 emit
+        """TCP server bound — called once right after startup."""
+        pass  # Logging is emitted directly from the server thread.
 
     @pyqtSlot()
     def _on_session_ready(self):
-        """BLE 연결 완료 — MEASURE 버튼 활성화"""
+        """BLE connected — enable the MEASURE button."""
         self.btn_manual_measure.setEnabled(True)
 
     @pyqtSlot()
     def _on_cycle_done(self):
-        """사이클 종료(정상/타임아웃/RESET) — 버튼 상태만 복원"""
+        """Cycle ended (normal / timeout / reset) — restore buttons."""
+        self._session_active = False
         self.btn_ready.setText("READY")
         self.btn_ready.setEnabled(True)
-        self.btn_reset.setEnabled(False)
         self.btn_manual_measure.setEnabled(False)
+        # RESET stays enabled so leftover data can still be cleared afterward.
+        if self._resetting:
+            # Server thread has fully stopped: wipe any late updates that
+            # slipped in before it halted, then resume normal UI updates.
+            self._clear_views()
+            self._resetting = False
+            self.add_log("[INFO] Reset complete.")
 
-    # ── 수동 측정 ────────────────────────────────────────────────
+    # ── Manual measurement ───────────────────────────────────────
 
     def do_manual_measure(self):
         self.btn_manual_measure.setEnabled(False)
@@ -124,10 +167,13 @@ class MainController(MainUI):
             self.add_log("[ERROR] Manual measurement failed. Check BLE connection.")
         self.btn_manual_measure.setEnabled(True)
 
-    # ── 테이블 / 로그 ────────────────────────────────────────────
+    # ── Table / log ──────────────────────────────────────────────
 
     @pyqtSlot(list)
     def update_table(self, data):
+        # Drop late rows from an in-flight measurement while resetting.
+        if self._resetting:
+            return
         row = self.table_data.rowCount()
         self.table_data.insertRow(row)
         for i, val in enumerate(data):
@@ -138,8 +184,12 @@ class MainController(MainUI):
 
     @pyqtSlot(str)
     def add_log(self, msg):
+        # Suppress server-thread log noise while resetting; the log is wiped
+        # and a single "Reset complete" line is shown once the cycle ends.
+        if self._resetting:
+            return
         timestamp = QDateTime.currentDateTime().toString("HH:mm:ss.zzz")
-        self.txt_log.append(f"<[{timestamp}]{msg}")
+        self.txt_log.append(f"[{timestamp}] {msg}")
 
 
 if __name__ == "__main__":
