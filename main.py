@@ -43,6 +43,13 @@ class MainController(MainUI):
         # thread (e.g. an in-flight BLE read) must be ignored so they cannot
         # repopulate the views right after we clear them.
         self._resetting = False
+        # True only while the server thread is running an active measurement
+        # cycle. Used to decide whether RESET must wait for the cycle to end.
+        self._session_active = False
+
+        # RESET stays usable at all times: besides stopping an active session,
+        # it also clears leftover data after a cycle has already ended.
+        self.btn_reset.setEnabled(True)
 
         self.btn_scan.clicked.connect(self.start_scan)
         self.btn_ready.clicked.connect(self.start_session)
@@ -76,25 +83,35 @@ class MainController(MainUI):
             return
         addr = self.cb_ble.currentText().split("(")[-1].replace(")", "")
         self.server.start_session(addr, self.cb_stocker.currentText())
+        self._session_active = True
         self.btn_ready.setEnabled(False)
         self.btn_ready.setText("RUNNING...")
         self.btn_reset.setEnabled(True)
 
     def reset_session(self):
-        """RESET button: force-close client socket, release BLE, reset UI."""
-        # Block any further view updates from the still-running server thread
-        # until it confirms the cycle has fully ended (cycle_done_signal).
-        self._resetting = True
+        """RESET button: stop any active session and clear the UI.
+
+        Works in two situations:
+        - An active cycle is still running: ask the server to stop, then defer
+          the final clear to _on_cycle_done so late signals can't repopulate.
+        - The cycle has already ended (e.g. client disconnected or timed out):
+          there will be no cycle_done_signal, so clear immediately.
+        """
         self.server.reset_session()
-        # Restore button states immediately so the user sees instant feedback,
-        # without waiting for the async cycle_done_signal from the server thread.
+        # Restore button/readout states immediately for instant feedback.
         self.btn_ready.setText("READY")
         self.btn_ready.setEnabled(True)
-        self.btn_reset.setEnabled(False)
         self.btn_manual_measure.setEnabled(False)
         self.lbl_x_val.setText("--")
         self.lbl_y_val.setText("--")
         self._clear_views()
+
+        if self._session_active:
+            # Server thread is still alive; suppress its remaining signals until
+            # it confirms the cycle ended, then do an authoritative final clear.
+            self._resetting = True
+        else:
+            self.add_log("[INFO] Reset complete.")
 
     def _clear_views(self):
         """Empty the table, BLE device list and system log."""
@@ -117,10 +134,11 @@ class MainController(MainUI):
     @pyqtSlot()
     def _on_cycle_done(self):
         """Cycle ended (normal / timeout / reset) — restore buttons."""
+        self._session_active = False
         self.btn_ready.setText("READY")
         self.btn_ready.setEnabled(True)
-        self.btn_reset.setEnabled(False)
         self.btn_manual_measure.setEnabled(False)
+        # RESET stays enabled so leftover data can still be cleared afterward.
         if self._resetting:
             # Server thread has fully stopped: wipe any late updates that
             # slipped in before it halted, then resume normal UI updates.
